@@ -27,6 +27,7 @@ double calculateAverageBrightness(const cv::Mat& frame);
 void setBrightness(int brightness);
 bool getGammaRamp(WORD gammaArray[3][256]);
 void restoreGammaRamp(WORD gammaArray[3][256]);
+void InitializeNotifyIconData(HINSTANCE hInstance, HWND hwnd, NOTIFYICONDATA& nid);
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nCmdShow);

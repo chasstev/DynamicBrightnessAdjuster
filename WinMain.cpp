@@ -26,25 +26,37 @@ double calculateAverageBrightness(const cv::Mat& frame) {
  * @param brightness The desired brightness level (0-100).
  */
 void setBrightness(int brightness) {
-    HDC hDC = GetDC(NULL);
-    WORD gammaArray[3][256];
+    DISPLAY_DEVICE dd;
+    ZeroMemory(&dd, sizeof(dd));
+    dd.cb = sizeof(dd);
+  
+    for (int i = 0; EnumDisplayDevices(NULL, i, &dd, 0); i++) {
+        if (dd.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) {
+            HDC hDC = CreateDC(NULL, dd.DeviceName, NULL, NULL);
+            if (!hDC) {
+                break;
+            }
+            if (brightness < minBrightness) {
+                brightness = minBrightness;
+            }
+            else if (brightness > maxBrightness) {
+                brightness = maxBrightness;
+            }
 
-    if (brightness < minBrightness) {
-        brightness = minBrightness;
-    } else if (brightness > maxBrightness) {
-        brightness = maxBrightness;
-    }
+            WORD gammaArray[3][256];
+            for (int i = 0; i < 256; i++) {
+                int value = (i * brightness / 100);
+                if (value > 255) {
+                    value = 255;
+                }
+                gammaArray[0][i] = gammaArray[1][i] = gammaArray[2][i] = (WORD)((value << 8) | value);
+            }
 
-    for (int i = 0; i < 256; i++) {
-        int value = (i * brightness / 100);
-        if (value > 255) {
-            value = 255;
+            SetDeviceGammaRamp(hDC, gammaArray);
+            DeleteDC(hDC);
+            break;
         }
-        gammaArray[0][i] = gammaArray[1][i] = gammaArray[2][i] = (WORD)((value << 8) | value);
     }
-
-    SetDeviceGammaRamp(hDC, gammaArray);
-    ReleaseDC(NULL, hDC);
 }
 
 /**
@@ -54,11 +66,24 @@ void setBrightness(int brightness) {
  * @return True if successful, false otherwise.
  */
 bool getGammaRamp(WORD gammaArray[3][256]) {
-    HDC hDC = GetDC(NULL);
-    BOOL result = GetDeviceGammaRamp(hDC, gammaArray);
-    ReleaseDC(NULL, hDC);
-    return result == TRUE;
+    DISPLAY_DEVICE dd;
+    ZeroMemory(&dd, sizeof(dd));
+    dd.cb = sizeof(dd);
+    for (int i = 0; EnumDisplayDevices(NULL, i, &dd, 0); i++) {
+        if (dd.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) {
+            HDC hDC = CreateDC(NULL, dd.DeviceName, NULL, NULL);
+            if (!hDC) {
+                break;
+            }
+
+            BOOL result = GetDeviceGammaRamp(hDC, gammaArray);
+            DeleteDC(hDC);
+            return result == TRUE;
+        }
+    }
+    return false;
 }
+
 
 /**
  * @brief Restores the gamma ramp to the original settings.
@@ -66,17 +91,50 @@ bool getGammaRamp(WORD gammaArray[3][256]) {
  * @param gammaArray Array containing the original gamma ramp values.
  */
 void restoreGammaRamp(WORD gammaArray[3][256]) {
-    HDC hDC = GetDC(NULL);
-    SetDeviceGammaRamp(hDC, gammaArray);
-    ReleaseDC(NULL, hDC);
+    DISPLAY_DEVICE dd;
+    ZeroMemory(&dd, sizeof(dd));
+    dd.cb = sizeof(dd);
+
+    for (int i = 0; EnumDisplayDevices(NULL, i, &dd, 0); i++) {
+        if (dd.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) {
+            HDC hDC = CreateDC(NULL, dd.DeviceName, NULL, NULL);
+            if (!hDC) {
+                break;
+            }
+
+            SetDeviceGammaRamp(hDC, gammaArray);
+            DeleteDC(hDC);
+            break; 
+        }
+    }
 }
 
 /**
- * @brief Window procedure for handling messages. 
+ * @brief Initializes the NOTIFYICONDATA structure.
+ *
+ * @param hInstance Handle to the current instance.
+ * @param hwnd Handle to the window.
+ * @param nid Reference to the NOTIFYICONDATA structure.
+ */
+void InitializeNotifyIconData(HINSTANCE hInstance, HWND hwnd, NOTIFYICONDATA& nid) {
+    ZeroMemory(&nid, sizeof(nid));
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = hwnd;
+    nid.uID = ID_TRAY_ICON;
+    nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+    nid.uCallbackMessage = WM_TRAYICON;
+    nid.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_ICON));
+    wcscpy_s(nid.szTip, L"Dynamic Brightness Adjuster");
+
+    Shell_NotifyIcon(NIM_ADD, &nid);
+}
+
+/**
+ * @brief Window procedure for handling messages.
  * Creates a context menu, gets the position of the tray icon, shows the context menu.
  * Destroys the menu, Removes the tray icon and exits.
  *
- * 
+ *
  * @param hwnd Handle to the window.
  * @param uMsg Message identifier.
  * @param wParam Additional message information.
@@ -119,8 +177,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 /**
- * @brief Main function of the program. 
- * Initializes the NOTIFYICONDATA structure. 
+ * @brief Main function of the program.
  * Stores the original gamma ramp.
  * Opens the default camera and Capture a new frame from the camera, sets the brightness.
  * Processes Windows messages.
@@ -140,16 +197,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 
     HWND hwnd = CreateWindowEx(0, L"TrayApp", L"Tray Application", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, hInstance, NULL);
 
-    // Initialize NOTIFYICONDATA structure
-    ZeroMemory(&nid, sizeof(nid));
-    nid.cbSize = sizeof(nid);
-    nid.hWnd = hwnd;
-    nid.uID = ID_TRAY_ICON;
-    nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
-    nid.uCallbackMessage = WM_TRAYICON;
-    nid.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_ICON));
-    wcscpy_s(nid.szTip, L"Dynamic Brightness Adjuster");
-
+    InitializeNotifyIconData(hInstance, hwnd, nid);
     Shell_NotifyIcon(NIM_ADD, &nid);
 
     if (!getGammaRamp(originalGammaArray)) {
