@@ -6,8 +6,8 @@
 ## About
 Made with: C++, OpenCV, Windows API, Doxygen
 - Program that uses the webcam to dynamically adjust the screens brightness.
-- Uses OpenCV to Capture frames from the webcam to analyze the brightness.
-- Uses the Windows API to automatically adjust the display brightness based on the average brightness of the captured frames.
+- Uses OpenCV for video capture and image processing to calculate average brightness from a camera input and dynamically adjust the display brightness
+- Uses Windows API functions to manage display gamma settings and automatically modify screen brightness.
 - Restores the users original brightness/gamma when the program exits.
 - Provides a system tray icon for easy access and control.
 
